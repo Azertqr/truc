@@ -1,0 +1,77 @@
+name: Build ChessBotUnlock IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download ChessBot IPA
+        run: |
+          curl -L -A "Mozilla/5.0" -o chessbot.ipa "https://pixeldrain.com/api/file/3XELWzvc"
+          ls -lh chessbot.ipa
+
+      - name: Compile ChessBotUnlock.dylib
+        run: |
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          clang++ \
+            -x objective-c++ \
+            -arch arm64 \
+            -dynamiclib \
+            -fobjc-arc \
+            -O2 \
+            -isysroot "$SDK" \
+            -miphoneos-version-min=15.0 \
+            -framework Foundation \
+            ChessBotUnlock.mm \
+            -o ChessBotUnlock.dylib
+
+      - name: Build optool
+        run: |
+          git clone --recursive https://github.com/alexzielenski/optool.git
+          cd optool
+          xcodebuild \
+            -project optool.xcodeproj \
+            -target optool \
+            -configuration Release \
+            MACOSX_DEPLOYMENT_TARGET=10.15 \
+            -quiet
+          sudo cp build/Release/optool /usr/local/bin/
+          cd ..
+
+      - name: Inject dylibs and repack IPA
+        run: |
+          mkdir payload_temp
+          unzip -q chessbot.ipa -d payload_temp/
+
+          APP_PATH=$(find payload_temp/Payload -maxdepth 1 -name "*.app")
+          EXE_NAME=$(/usr/libexec/PlistBuddy \
+            -c "Print :CFBundleExecutable" "$APP_PATH/Info.plist")
+
+          cp ChessBotUnlock.dylib "$APP_PATH/"
+          cp blatantsPatch.dylib "$APP_PATH/"
+
+          optool install -c load \
+            -p "@executable_path/ChessBotUnlock.dylib" \
+            -t "$APP_PATH/$EXE_NAME"
+
+          optool install -c load \
+            -p "@executable_path/blatantsPatch.dylib" \
+            -t "$APP_PATH/$EXE_NAME"
+
+          cd payload_temp
+          zip -qr ../ChessBot-Unlocked.ipa Payload
+          cd ..
+          rm -rf payload_temp
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChessBot-Unlocked
+          path: ChessBot-Unlocked.ipa
+          retention-days: 7
