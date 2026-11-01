@@ -44,7 +44,7 @@ jobs:
           sudo cp build/Release/optool /usr/local/bin/
           cd ..
 
-      - name: Inject dylibs and repack IPA
+      - name: Inject dylib and repack IPA
         run: |
           mkdir payload_temp
           unzip -q chessbot.ipa -d payload_temp/
@@ -54,14 +54,9 @@ jobs:
             -c "Print :CFBundleExecutable" "$APP_PATH/Info.plist")
 
           cp ChessBotUnlock.dylib "$APP_PATH/"
-          cp blatantsPatch.dylib "$APP_PATH/"
 
           optool install -c load \
             -p "@executable_path/ChessBotUnlock.dylib" \
-            -t "$APP_PATH/$EXE_NAME"
-
-          optool install -c load \
-            -p "@executable_path/blatantsPatch.dylib" \
             -t "$APP_PATH/$EXE_NAME"
 
           cd payload_temp
